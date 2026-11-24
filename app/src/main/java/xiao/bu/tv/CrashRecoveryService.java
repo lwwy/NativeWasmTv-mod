@@ -15,8 +15,9 @@ import android.os.SystemClock;
 import xiao.bu.tv.AppLog;
 
 public final class CrashRecoveryService extends Service {
-    static final String ACTION_ARM = "xiao.bu.tv.action.ARM_CRASH_RECOVERY";
-    static final String ACTION_DISARM = "xiao.bu.tv.action.DISARM_CRASH_RECOVERY";
+    // [lwwy-mod] Scope broadcast actions to this app so dual installs stay isolated.
+    static final String ACTION_ARM = BuildConfig.APPLICATION_ID + ".action.ARM_CRASH_RECOVERY";
+    static final String ACTION_DISARM = BuildConfig.APPLICATION_ID + ".action.DISARM_CRASH_RECOVERY";
     static final String EXTRA_RECOVERED = "crash_recovered";
 
     private static final String TAG = "CrashRecovery";

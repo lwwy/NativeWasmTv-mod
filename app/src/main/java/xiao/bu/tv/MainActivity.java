@@ -141,7 +141,7 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
         configureChannelPanelInteraction();groupAdapter.notifyDataSetChanged();applyEpgEnabled();epgAdapter.notifyDataSetChanged();
         refreshEpgViews();
         updateChannelPanelWidth();updateChannelBarWidth();refreshTvUiCard();
-        if(opened){channelList.setSelection(Math.max(0,selection));if(groupsFocused)groupList.requestFocus();else if(guideFocused&&epgExpanded)focusEpgList();else channelList.requestFocus();scheduleChannelListDismiss();}
+        if(opened){channelList.setSelection(Math.max(0,selection));if(groupsFocused)groupList.requestFocus();else if(guideFocused&&epgExpanded)focusEpgList();else channelList.requestFocus();scheduleChannelListDismiss();showChannelMenuButton();}
         if(channelBar.getVisibility()==View.VISIBLE&&!loadingActive)channelBar.postDelayed(hideChannelBar,CHANNEL_BAR_TIMEOUT_MS);
     }
     private TextView channelNumberView(){return (TextView)(tvUiChrome==null?findViewById(R.id.channel_card_number):tvUiChrome.originalCard().findViewById(R.id.channel_card_number));}
@@ -1274,6 +1274,10 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
     private boolean remoteInputMode;
     private String numericChannelInput = "";
     private boolean playbackGestureTracking;
+    // [lwwy-mod] Disable ONLY on-screen playback swipes (channel/source/brightness/volume/seek); taps stay enabled.
+    private static final boolean ENABLE_PLAYBACK_SWIPE = false;
+    // [lwwy-mod] Menu entry relocated into the channel panel's bottom-left corner.
+    private View channelMenuButton;
     private boolean loadingActive;
     private final LinkedHashSet<String> favoriteChannelKeys =
             new LinkedHashSet<String>();
@@ -1484,6 +1488,7 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
         root = findViewById(R.id.root);
         playbackGestureTouchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
         configurePlaybackGestureExclusion();
+        createChannelMenuButton();
         channelBar = findViewById(R.id.channel_bar);
         channelListPanel = findViewById(R.id.channel_list_panel);
         channelProgress = (LoadingSpinnerView) findViewById(R.id.channel_progress);
@@ -13470,6 +13475,7 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
         // so the remote OK key remains usable on both video and WebView channels.
         channelListPanel.bringToFront();
         updateChannelPanelWidth();
+        showChannelMenuButton();
         ensureFlyMouseOnTop();
         int[] displayed = displayedChannelLocation();
         final int menuGroup = displayed[0] >= 0 ? displayed[0] : ChannelCatalog.firstPlayableGroupIndex();
@@ -13654,6 +13660,7 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
         channelPanelHovering = false;
         favoriteActionFocused = false;
         channelListPanel.setVisibility(View.GONE);
+        hideChannelMenuButton();
         if (refreshOverlay) applyClockLocation();
         requestPlaybackFocus();
     }
@@ -13668,6 +13675,53 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
             return;
         }
         channelListPanel.postDelayed(hideChannelList, PANEL_TIMEOUT_MS);
+    }
+
+    // [lwwy-mod] ---- Menu entry icon inside the channel panel (theme-independent) ----
+    private int menuButtonDp(float value) {
+        return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value,
+                getResources().getDisplayMetrics()));
+    }
+
+    private void createChannelMenuButton() {
+        TextView button = new TextView(this);
+        button.setText("☰ 菜单");
+        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
+        button.setTextColor(0xFFFFFFFF);
+        button.setGravity(Gravity.CENTER);
+        button.setClickable(true);
+        button.setFocusable(true);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(0xE6333B4E);
+        bg.setCornerRadius(menuButtonDp(10f));
+        bg.setStroke(menuButtonDp(1f), 0x66FFFFFF);
+        button.setBackgroundDrawable(bg);
+        int padX = menuButtonDp(14f), padY = menuButtonDp(8f);
+        button.setPadding(padX, padY, padX, padY);
+        button.setOnClickListener(v -> {
+            if (TvUiPlugin.current() != null) openTvUiMenu(); else openWebManagement();
+        });
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
+        lp.gravity = Gravity.BOTTOM | Gravity.LEFT;
+        channelMenuButton = button;
+        ((FrameLayout) root).addView(button, lp);
+        channelMenuButton.setVisibility(View.GONE);
+    }
+
+    private void showChannelMenuButton() {
+        if (channelMenuButton == null) return;
+        // Align to the panel's bottom-left, inset by its padding, and above the bottom edge.
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) channelMenuButton.getLayoutParams();
+        lp.leftMargin = menuButtonDp(20f);
+        lp.bottomMargin = menuButtonDp(18f);
+        channelMenuButton.setLayoutParams(lp);
+        channelMenuButton.bringToFront();
+        channelMenuButton.setVisibility(View.VISIBLE);
+    }
+
+    private void hideChannelMenuButton() {
+        if (channelMenuButton != null) channelMenuButton.setVisibility(View.GONE);
     }
 
     private void configureChannelPanelInteraction() {
@@ -16957,11 +17011,11 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
         playbackGestureDeltaY = deltaY;
         float absoluteX = Math.abs(deltaX);
         float absoluteY = Math.abs(deltaY);
-        if (!playbackGestureVertical && !playbackGestureHorizontal
+        if (ENABLE_PLAYBACK_SWIPE && !playbackGestureVertical && !playbackGestureHorizontal
                 && absoluteY > playbackGestureTouchSlop
                 && absoluteY > absoluteX * 1.25f) {
             playbackGestureVertical = true;
-        } else if (!playbackGestureVertical && !playbackGestureHorizontal
+        } else if (ENABLE_PLAYBACK_SWIPE && !playbackGestureVertical && !playbackGestureHorizontal
                 && absoluteX > playbackGestureTouchSlop
                 && absoluteX > absoluteY * 1.25f) {
             playbackGestureHorizontal = true;
@@ -17032,7 +17086,7 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
                     } else if (playbackGestureLeftSide) {
                         openChannelList();
                     } else {
-                        if(TvUiPlugin.current()!=null)openTvUiMenu();else openWebManagement();
+                        // [lwwy-mod] Right-side tap no longer opens the menu; use the channel-panel icon instead.
                     }
                 }
                 resetPlaybackGesture();
