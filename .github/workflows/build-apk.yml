@@ -58,7 +58,7 @@ jobs:
         # -PwithoutBrowserCore 跳过私有内核；-PapplicationIdOverride 让包名变为 xiao.bu.tv.mod，
         # 与原版 xiao.bu.tv 共存（authority/广播 action 会随包名自动隔离）。
         # debug 用 Android 默认调试签名，可直接安装。
-        run: ./gradlew -PwithoutBrowserCore -PapplicationIdOverride=xiao.bu.tv.mod ${{ steps.tasks.outputs.value }} --console=plain --stacktrace
+        run: ./gradlew -PwithoutBrowserCore -PapplicationIdOverride=xiao.bu.tv.mod -PversionCodeOverride=13 -PversionNameOverride=1.8.3-mod2 ${{ steps.tasks.outputs.value }} --console=plain --stacktrace
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
