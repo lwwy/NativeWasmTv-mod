@@ -13711,10 +13711,35 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
 
     private void showChannelMenuButton() {
         if (channelMenuButton == null) return;
-        // Align to the panel's bottom-left, inset by its padding, and above the bottom edge.
+        // The channel panel is rebuilt on theme switches and its margins/scale vary per
+        // theme, so position the icon from the panel's real bounds on the next frame
+        // instead of hard-coded screen offsets. This keeps it aligned in every theme.
+        channelListPanel.post(() -> positionChannelMenuButton());
+    }
+
+    private void positionChannelMenuButton() {
+        if (channelMenuButton == null || channelListPanel.getWidth() <= 0) return;
+        boolean themed = TvUiPlugin.current() != null;
+        String id = themed ? TvUiPlugin.current().id : "";
+        float d = themed ? TvUiChrome.scale(root) : effectiveUiDensity();
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) channelMenuButton.getLayoutParams();
-        lp.leftMargin = menuButtonDp(20f);
-        lp.bottomMargin = menuButtonDp(18f);
+
+        // Horizontal: align the icon's left edge with the panel's inner column start
+        // (panel left edge + the theme's own content inset).
+        int columnInset = themed ? Math.round(("ui6".equals(id) ? 12f : 16f) * d) : menuButtonDp(14f);
+        lp.leftMargin = channelListPanel.getLeft() + columnInset;
+
+        // Vertical: base on the panel's actual bottom, not the screen bottom.
+        int panelBottomGap = Math.max(0, root.getHeight() - channelListPanel.getBottom());
+        int bottomInset = menuButtonDp(12f);
+        if ("ui6".equals(id)) {
+            // Frosted-glass theme draws "OK 播放  长按频道 收藏/取消" along its bottom
+            // edge (baseline at panelHeight - 18*d). Lift the icon above the divider
+            // line at panelHeight - 48*d so it never overlaps that caption.
+            bottomInset = Math.round(58 * d);
+        }
+        lp.bottomMargin = panelBottomGap + bottomInset;
+        lp.gravity = Gravity.BOTTOM | Gravity.LEFT;
         channelMenuButton.setLayoutParams(lp);
         channelMenuButton.bringToFront();
         channelMenuButton.setVisibility(View.VISIBLE);
