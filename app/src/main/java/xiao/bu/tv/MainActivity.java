@@ -13687,15 +13687,9 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
         TextView button = new TextView(this);
         button.setText("☰ 菜单");
         button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
-        button.setTextColor(0xFFFFFFFF);
         button.setGravity(Gravity.CENTER);
         button.setClickable(true);
         button.setFocusable(true);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(0xE6333B4E);
-        bg.setCornerRadius(menuButtonDp(10f));
-        bg.setStroke(menuButtonDp(1f), 0x66FFFFFF);
-        button.setBackgroundDrawable(bg);
         int padX = menuButtonDp(14f), padY = menuButtonDp(8f);
         button.setPadding(padX, padY, padX, padY);
         button.setOnClickListener(v -> {
@@ -13706,7 +13700,44 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
         lp.gravity = Gravity.BOTTOM | Gravity.LEFT;
         channelMenuButton = button;
         ((FrameLayout) root).addView(button, lp);
+        applyChannelMenuButtonTheme();
         channelMenuButton.setVisibility(View.GONE);
+    }
+
+    // [lwwy-mod] Adopt the active theme's own panel palette so the icon looks like
+    // a piece of the frosted panel instead of a foreign dark-blue chip.
+    private void applyChannelMenuButtonTheme() {
+        if (channelMenuButton == null) return;
+        TvUiStyle style = TvUiPlugin.current();
+        GradientDrawable bg = new GradientDrawable();
+        int textColor;
+        if (style != null) {
+            String id = style.id;
+            Bundle palette = xiao.bu.tv.skin.SharedTvUi.dialogPalette(id);
+            float d = TvUiChrome.scale(root);
+            boolean frosted = "ui6".equals(id) || "ui5".equals(id);
+            float radiusDp = frosted ? 22f : "ui2".equals(id) ? 20f : "ui3".equals(id) ? 10f : 0f;
+            bg.setCornerRadius(Math.round(radiusDp * d));
+            if (frosted) {
+                // Same two-stop gradient + hairline stroke as the channel panel's
+                // fallback glass, which is what is actually seen most of the time.
+                bg.setGradientType(GradientDrawable.LINEAR_GRADIENT);
+                bg.setColors(new int[]{palette.getInt("panelStart"), palette.getInt("panelEnd")});
+                bg.setStroke(Math.max(1, Math.round(d)), 0x668f8e8b);
+            } else {
+                bg.setColor(palette.getInt("panel"));
+                bg.setStroke(Math.max(1, Math.round(d)), 0x33ffffff);
+            }
+            textColor = palette.getInt("text");
+        } else {
+            // Built-in theme keeps the original look.
+            bg.setColor(0xE6333B4E);
+            bg.setCornerRadius(menuButtonDp(10f));
+            bg.setStroke(menuButtonDp(1f), 0x66FFFFFF);
+            textColor = 0xFFFFFFFF;
+        }
+        channelMenuButton.setBackgroundDrawable(bg);
+        ((TextView) channelMenuButton).setTextColor(textColor);
     }
 
     private void showChannelMenuButton() {
@@ -13719,6 +13750,8 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
 
     private void positionChannelMenuButton() {
         if (channelMenuButton == null || channelListPanel.getWidth() <= 0) return;
+        // Theme may have been rebuilt since creation; refresh the palette every time.
+        applyChannelMenuButtonTheme();
         boolean themed = TvUiPlugin.current() != null;
         String id = themed ? TvUiPlugin.current().id : "";
         float d = themed ? TvUiChrome.scale(root) : effectiveUiDensity();
@@ -13726,7 +13759,8 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
 
         // Horizontal: align the icon's left edge with the panel's inner column start
         // (panel left edge + the theme's own content inset).
-        int columnInset = themed ? Math.round(("ui6".equals(id) ? 12f : 16f) * d) : menuButtonDp(14f);
+        // ui6: Panel.onDraw draws the "频道" column header at 28*d inside the panel.
+        int columnInset = themed ? Math.round(("ui6".equals(id) ? 28f : 16f) * d) : menuButtonDp(14f);
         lp.leftMargin = channelListPanel.getLeft() + columnInset;
 
         // Vertical: base on the panel's actual bottom, not the screen bottom.
