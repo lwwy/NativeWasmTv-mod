@@ -1278,6 +1278,22 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
     private static final boolean ENABLE_PLAYBACK_SWIPE = false;
     // [lwwy-mod] Menu entry relocated into the channel panel's bottom-left corner.
     private View channelMenuButton;
+    // [lwwy-mod] Privacy: disable startup update check and the LAN management server
+    // (no TCP 9966-9975 or UDP 9966 listeners). Flip to true to restore either.
+    private static final boolean ENABLE_UPDATE_CHECK = false;
+    private static final boolean ENABLE_MANAGEMENT_SERVER = false;
+    // [lwwy-mod] Frosted-glass (ui6) panel: hide the program-guide handle/column and
+    // disable favorite actions, matching the simplified channel row. Other themes untouched.
+    private static final boolean UI6_SIMPLIFIED_PANEL = true;
+    private static boolean isFrostedUi() {
+        return TvUiPlugin.current() != null && "ui6".equals(TvUiPlugin.current().id);
+    }
+    private static boolean guideHidden() {
+        return UI6_SIMPLIFIED_PANEL && isFrostedUi();
+    }
+    private static boolean favoriteDisabled() {
+        return UI6_SIMPLIFIED_PANEL && isFrostedUi();
+    }
     private boolean loadingActive;
     private final LinkedHashSet<String> favoriteChannelKeys =
             new LinkedHashSet<String>();
@@ -1290,6 +1306,7 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
     private float channelTouchFavoriteX,channelTouchFavoriteY;
     private boolean channelTouchFavoriteConsumed;
     private final Runnable channelTouchFavoriteLongPress=()->{
+        if(favoriteDisabled())return;
         if(channelTouchFavoritePosition<0||channelTouchFavoriteConsumed||channelListPanel.getVisibility()!=View.VISIBLE
                 ||browsingGroupIndex!=channelTouchFavoriteGroup)return;
         channelTouchFavoriteConsumed=true;
@@ -1300,6 +1317,7 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
         toggleChannelFavoriteFromLongPress(channelTouchFavoritePosition);
     };
     private final Runnable channelFavoriteLongPress=()->{
+        if(favoriteDisabled())return;
         if(channelConfirmKey<0||channelConfirmLongPress||channelListPanel.getVisibility()!=View.VISIBLE
                 ||tvUiMenu.visible()||managementPanel.getVisibility()==View.VISIBLE||backPrompt.getVisibility()==View.VISIBLE
                 ||!channelList.hasFocus()||favoriteActionFocused||browsingGroupIndex!=channelConfirmGroup
@@ -1817,7 +1835,8 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
         root.requestFocus();
         autoUpdater = new AutoUpdater(this);
         autoUpdater.setLiteListener(()->{if(!isFinishing())tvUiMenu.refresh();});
-        deferStartupMaintenance("update-check", () -> autoUpdater.checkForUpdates());
+        // [lwwy-mod] Privacy: startup update check disabled (no request to upstream GitHub).
+        if (ENABLE_UPDATE_CHECK) deferStartupMaintenance("update-check", () -> autoUpdater.checkForUpdates());
         deferStartupMaintenance("plugin-update-check", () -> new Thread(() -> {
             try { CjsPluginRuntime.checkInstalledOnce(); }
             catch (Exception error) { AppLog.w(TAG, "Startup plugin update failed; retaining local plugins", error); }
@@ -3459,6 +3478,9 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
                     return handleControlPage(path);
                 }
             });
+            // [lwwy-mod] Privacy: keep the receiver object but open no LAN listener
+            // (TCP 9966-9975 / UDP 9966). Flipping ENABLE_MANAGEMENT_SERVER to true restores it.
+            if (!ENABLE_MANAGEMENT_SERVER) return;
             controlServer.start();
             if (isTelevisionDevice()) {
                 if (castDeviceDiscovery != null) castDeviceDiscovery.close();
@@ -13279,6 +13301,9 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
     }
 
     private void setFavoriteActionFocused(boolean focused) {
+        // [lwwy-mod] UI6: star column removed and long-press favorite disabled;
+        // never enter the now-invisible favorite focus.
+        if (favoriteDisabled()) focused=false;
         favoriteActionFocused = focused&&epgShowFavorite;
         updateFavoriteButton();
         if (focused || epgFavorite.hasFocus() || epgList.hasFocus()) {
@@ -13767,10 +13792,9 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
         int panelBottomGap = Math.max(0, root.getHeight() - channelListPanel.getBottom());
         int bottomInset = menuButtonDp(12f);
         if ("ui6".equals(id)) {
-            // Frosted-glass theme draws "OK 播放  长按频道 收藏/取消" along its bottom
-            // edge (baseline at panelHeight - 18*d). Lift the icon above the divider
-            // line at panelHeight - 48*d so it never overlaps that caption.
-            bottomInset = Math.round(58 * d);
+            // [lwwy-mod] UI6: the bottom divider line and "OK 播放 / 长按收藏"
+            // caption are removed, so the menu icon can sit close to the panel bottom.
+            bottomInset = Math.round(14 * d);
         }
         lp.bottomMargin = panelBottomGap + bottomInset;
         lp.gravity = Gravity.BOTTOM | Gravity.LEFT;
@@ -14203,13 +14227,15 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
     }
 
     private void applyEpgEnabled() {
-        if(!epgShowFavorite)favoriteActionFocused=false;
-        if(channelAdapter!=null)channelAdapter.setShowFavorite(epgShowFavorite);
-        if(epgFavorite!=null&&!epgShowFavorite){boolean focused=epgFavorite.hasFocus();epgFavorite.setVisibility(View.GONE);if(focused)channelList.requestFocus();}
+        if(!epgShowFavorite||favoriteDisabled())favoriteActionFocused=false;
+        // [lwwy-mod] UI6: hide the star column data too so no invisible favorite
+        // tap area remains; other themes keep the original favorite behaviour.
+        if(channelAdapter!=null)channelAdapter.setShowFavorite(epgShowFavorite&&!favoriteDisabled());
+        if(epgFavorite!=null&&(!epgShowFavorite||favoriteDisabled())){boolean focused=epgFavorite.hasFocus();epgFavorite.setVisibility(View.GONE);if(focused)channelList.requestFocus();}
         if(channelAdapter!=null)channelAdapter.setShowLogos(epgShowLogos);
         if(epgAdapter!=null)epgAdapter.setDatePickerEnabled(epgDatePicker);
-        if (!epgEnabled) epgExpanded = false;
-        if (epgToggle != null) epgToggle.setVisibility(epgEnabled ? View.VISIBLE : View.GONE);
+        if (!epgEnabled || guideHidden()) epgExpanded = false;
+        if (epgToggle != null) epgToggle.setVisibility(epgEnabled && !guideHidden() ? View.VISIBLE : View.GONE);
         if (epgColumn != null) setEpgColumnVisible(epgEnabled && epgExpanded);
         if (channelAdapter != null) {
             channelAdapter.setEpgManager(epgEnabled ? epgManager : null);
@@ -14285,6 +14311,7 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
     }
 
     private boolean canOpenBrowsingEpg(int position) {
+        if(guideHidden())return false;
         if(!canBrowseGroupChannels(browsingGroupIndex)){
             requireGroupPassword(browsingGroupIndex,-1,false,this::enterChannelColumn);return false;
         }
@@ -14307,9 +14334,11 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
             return;
         }
         boolean available=hasBrowsingEpg(position);
-        epgToggle.setVisibility(View.VISIBLE);
+        // [lwwy-mod] UI6: keep the program-guide handle hidden; it is not part of
+        // the simplified frosted-glass panel.
+        epgToggle.setVisibility(guideHidden()?View.GONE:View.VISIBLE);
         epgToggle.setEnabled(true);
-        if(!available)epgExpanded=false;
+        if(!available||guideHidden())epgExpanded=false;
         boolean horizontalGuide=TvUiPlugin.current()!=null&&"ui6".equals(TvUiPlugin.current().id);
         epgToggle.setText(horizontalGuide?(epgExpanded?"节目单  ‹":"节目单  ›"):
                 TvUiPlugin.current()!=null?"节\n目\n预\n告":epgExpanded ? "节\n目\n单\n‹" : "节\n目\n单\n›");
@@ -14468,7 +14497,7 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
 
     private void setEpgColumnVisible(boolean visible) {
         if(!visible)rememberEpgCursor();
-        visible = visible && epgEnabled;
+        visible = visible && epgEnabled && !guideHidden();
         if(!visible)epgNavigationActive=false;
         int visibility = visible ? View.VISIBLE : View.GONE;
         boolean changed = epgColumn.getVisibility() != visibility;

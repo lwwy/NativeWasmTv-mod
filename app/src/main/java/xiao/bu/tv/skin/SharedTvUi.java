@@ -167,12 +167,15 @@ public abstract class SharedTvUi implements TvUi {
             int limit=MeasureSpec.getSize(ws),h=MeasureSpec.getSize(hs);
             if(theme()==6){
                 int g=Math.round((titleWidth(slots[0],18,8,90)+110)*d);
-                int channel=Math.round((titleWidth(slots[1],18,xiao.bu.tv.ChannelNameWidth.MAX_CHARS,90)+146+channelLeading()+channelTrailing())*d);
+                // [lwwy-mod] UI6: favorite star column and source-count column removed,
+                // so the channel column no longer reserves their width.
+                int channel=Math.round((titleWidth(slots[1],18,xiao.bu.tv.ChannelNameWidth.MAX_CHARS,90)+72+channelLeading())*d);
                 boolean expanded=slots[3].getVisibility()!=GONE;
                 int w=Math.min(limit,g+channel+Math.round(24*d)+(expanded?Math.round((230+guideExtra())*d):0));
                 g=Math.min(g,w/2);int epg=expanded?Math.min(Math.round((230+guideExtra())*d),Math.max(0,w-g-Math.round(180*d))):0;
                 channel=Math.max(1,w-g-epg-Math.round(24*d));setMeasuredDimension(w,h);
-                int available=Math.max(1,h-Math.round(124*d));channelPitch=fittedRowHeight(available,Math.round(rowHeight()*d));groupPitch=channelPitch;
+                // [lwwy-mod] UI6: bottom caption/divider removed; reclaim that space for taller rows.
+                int available=Math.max(1,h-Math.round(88*d));channelPitch=fittedRowHeight(available,Math.round(rowHeight()*d));groupPitch=channelPitch;
                 for(int i=0;i<4;i++)slots[i].measure(MeasureSpec.makeMeasureSpec(i==0?g:i==1?channel:i==2?Math.round(100*d):epg,MeasureSpec.EXACTLY),MeasureSpec.makeMeasureSpec(i==2?Math.round(40*d):available,MeasureSpec.EXACTLY));
                 return;
             }
@@ -220,8 +223,9 @@ public abstract class SharedTvUi implements TvUi {
                 View selected=((ListView)slots[0]).getSelectedView();Bundle group=selected instanceof Row?((Row)selected).data:null;
                 p.setColor(Color.WHITE);c.drawText(group==null?"频道列表":group.getString("title","频道列表"),slots[1].getLeft()+18*d,42*d,p);
                 p.setTextSize(13*d);p.setColor(0xffbdbdbf);c.drawText(((ListView)slots[1]).getCount()+" 个频道",slots[1].getLeft()+18*d,62*d,p);
-                p.setStrokeWidth(d/2);p.setColor(0x55aaaaaa);c.drawLine(slots[0].getRight(),24*d,slots[0].getRight(),getHeight()-60*d,p);c.drawLine(22*d,getHeight()-48*d,getWidth()-22*d,getHeight()-48*d,p);
-                p.setTextSize(13*d);p.setColor(0xffdddddf);c.drawText("OK 播放    长按频道 收藏/取消",24*d,getHeight()-18*d,p);return;
+                // [lwwy-mod] UI6: drop the bottom divider line and the "OK 播放 / 长按收藏"
+                // caption; extend the column separator to the bottom for one uniform card.
+                p.setStrokeWidth(d/2);p.setColor(0x55aaaaaa);c.drawLine(slots[0].getRight(),24*d,slots[0].getRight(),getHeight()-16*d,p);return;
             }
             p.setColor(theme()==2?0x6b001c20:theme()==3?0x30202430:theme()==4?0x80000106:0x74141c26);float width=slots[0].getRight(),radius=radius()*d;c.save();c.clipRect(0,0,width,getHeight());shadeBounds.set(0,0,width+radius,getHeight());c.drawRoundRect(shadeBounds,radius,radius,p);c.restore();
             if(theme()==2&&slots[2].getVisibility()!=GONE){
@@ -314,7 +318,7 @@ public abstract class SharedTvUi implements TvUi {
             }canvas.restore();
         }
         private void glassRow(Canvas c,float w,float h){
-            boolean playing=data.getBoolean("playing"),chosen=data.getBoolean("selected");
+            boolean chosen=data.getBoolean("selected");
             boolean ownsFocus=!(getParent() instanceof ListView)||((ListView)getParent()).hasFocus();
             boolean favoriteFocus=!group&&data.getBoolean("showFavorite",true)&&chosen&&ownsFocus&&data.getBoolean("favoriteFocused");
             boolean focused=(isPressed()||chosen&&ownsFocus)&&!favoriteFocus;
@@ -329,23 +333,17 @@ public abstract class SharedTvUi implements TvUi {
             }
             if(focused)selected(c,8,2,w,h-2);
             int ink=focused?0xff101112:0xfff3f3f5,secondary=focused?0xff57585a:0xffbdbdc2;
-            if(playing)playbackBars(c,10,h/2+9,3,ink,ink,ink);
+            // [lwwy-mod] UI6: left-align the index at the panel header's 18-dp inset,
+            // drop the "2" source-count column, the favorite star column and the
+            // animated playing bars. The selected row shows a white bar instead.
+            // Index, logo and title keep one stable left baseline in every state.
             String number=data.getString("number","");if(number.length()==1)number="0"+number;
-            centerNumber(c,number,28,68,h/2,16,ink);
-            float left=channelLogo(c,72,h);
+            text(c,number,18,h/2+6,16,ink,40);
+            float left=channelLogo(c,60,h);
             String program=data.getString("program","");
-            float trailing=data.getBoolean("showFavorite",true)?100:66;
-            p.setFakeBoldText(true);channelTitle(c,left,program.length()>0?h/2-3:h/2+6,18,ink,w-left-trailing);p.setFakeBoldText(false);
-            text(c,program,left,h/2+17,13,secondary,w-left-trailing);
-            int sources=data.getInt("sources",1);
-            float sourceRight=data.getBoolean("showFavorite",true)?w-46:w-12;
-            center(c,playing?(data.getInt("source",0)+1)+"/"+sources:String.valueOf(sources),sourceRight-41,sourceRight,h/2+5,14,secondary);
-            if(!data.getBoolean("showFavorite",true))return;
-            if(favoriteFocus)selected(c,w-46,h/2-20,w-4,h/2+20);
-            String star=data.getBoolean("favorite")?"★":"☆";
-            p.setTypeface(Typeface.DEFAULT);p.setTextSize(25);p.getTextBounds(star,0,star.length(),starBounds);
-            p.setColor(favoriteFocus?0xff101112:data.getBoolean("favorite")?0xfff4d63d:ink);
-            c.drawText(star,w-25-(starBounds.left+starBounds.right)/2f,h/2-(starBounds.top+starBounds.bottom)/2f,p);
+            p.setFakeBoldText(true);channelTitle(c,left,program.length()>0?h/2-3:h/2+6,18,ink,w-left-12);p.setFakeBoldText(false);
+            text(c,program,left,h/2+17,13,secondary,w-left-12);
+            return;
         }
         private float channelLogo(Canvas c,float left,float h){
             if(!data.getBoolean("showLogos"))return left;
@@ -413,9 +411,26 @@ public abstract class SharedTvUi implements TvUi {
     private final class Card extends Drawing {
         Bundle data;String[] programs=new String[0];final Rect identityBounds=new Rect();Card(Context c,Bundle b){super(c);bind(b);}
         void bind(Bundle b){data=b;String epg=b.getString("epg","");programs=epg.length()==0?new String[0]:epg.split("\n");if(theme()<=4)for(int i=0;i<programs.length;i++){int dash=programs[i].indexOf('–'),space=programs[i].indexOf(' ');if(dash==5&&space>dash)programs[i]=programs[i].substring(0,dash)+programs[i].substring(space);}setContentDescription(b.getString("title","")+" "+b.getString("epg","")+" "+b.getString("status",""));invalidate();}
-        protected void onMeasure(int ws,int hs){float d=scale(getContext());setMeasuredDimension(resolveSize(Math.round((theme()==3?600:theme()<=4?720:680)*d),ws),resolveSize(Math.round(124*d),hs));}
+        protected void onMeasure(int ws,int hs){float d=scale(getContext());setMeasuredDimension(resolveSize(Math.round((theme()==6?420:theme()==3?600:theme()<=4?720:680)*d),ws),resolveSize(Math.round((theme()==6?80:124)*d),hs));}
         protected void onDraw(Canvas canvas){float w=getWidth(),h=getHeight(),d=scale(getContext());canvas.save();canvas.scale(d,d);w/=d;h/=d;
-            if(theme()==5||theme()==6){
+            if(theme()==6){
+                // [lwwy-mod] UI6 frosted card: left identity untouched; right side
+                // shows a single centered line "直播播放中  14:05" at one size.
+                box(canvas,0,0,w,h,panel(),22);
+                String number=data.getString("number","").replace(" |","");
+                centerIdentity(canvas,number,16,196,h/2-6,28,0xfff5f7fa);
+                centerIdentity(canvas,data.getString("title",""),16,196,h/2+18,16,0xfff5f7fa);
+                line(canvas,210,12,210,h-12);
+                p.setTypeface(Typeface.DEFAULT);p.setTextSize(18);
+                String status=ui6Status(),clock=ui6Clock();
+                float gap=18,sw=p.measureText(status),cw=p.measureText(clock);
+                float block=sw+gap+cw,region=w-226;
+                float x=226+Math.max(0,(region-block)/2);
+                text(canvas,status,x,h/2+6,18,0xfff5f7fa,sw+1);
+                text(canvas,clock,x+sw+gap,h/2+6,18,0xffcbd0d5,cw+1);
+                canvas.restore();return;
+            }
+            if(theme()==5){
                 box(canvas,0,0,w,h,panel(),22);
                 String number=data.getString("number","").replace(" |","");
                 // Channel identity follows the reference: large number above a
@@ -436,6 +451,18 @@ public abstract class SharedTvUi implements TvUi {
             float left=split+(theme()==4?8:theme()==2?10:16),available=w-left-16;
             cardLines(canvas,left,available,d);
             canvas.restore();
+        }
+        private String ui6Status(){
+            String s=data.getString("status","");
+            int at=s.indexOf(" · 线路");
+            return at>=0?s.substring(0,at):s;
+        }
+        private String ui6Clock(){
+            // dateTime is "14:05 周四" (or "MM月dd日 HH:mm:ss 周四" on ui4).
+            // Keep only the clock portion before the weekday.
+            String date=data.getString("dateTime","").trim();
+            int sp=date.indexOf(' ');
+            return sp>0?date.substring(0,sp).trim():date;
         }
         private void cardLines(Canvas canvas,float left,float available,float d){
             // Center the complete four-line block using font metrics rather than
