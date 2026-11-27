@@ -315,7 +315,8 @@ public final class WebSourceView extends FrameLayout {
     }
 
     private boolean hostResumed;
-    private boolean backgroundPlaybackEnabled=true;
+    // [lwwy-mod] Background playback defaults off.
+    private boolean backgroundPlaybackEnabled=false;
     private WebView backgroundPausedView;
     void applyBackgroundPlayback(boolean enabled){
         backgroundPlaybackEnabled=enabled;

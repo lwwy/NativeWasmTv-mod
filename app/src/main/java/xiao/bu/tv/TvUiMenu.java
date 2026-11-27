@@ -63,10 +63,24 @@ final class TvUiMenu {
         int verticalInset=menu&&"ui2".equals(style.id)?Math.round(8*d):inset;
         int horizontalInset=menu&&"ui3".equals(style.id)?Math.round(24*d):inset;
         int height=menu?Math.max(1,anchor.getHeight()-2*verticalInset):ViewGroup.LayoutParams.MATCH_PARENT;
+        int topInset=verticalInset;
+        // [lwwy-mod] ui6: shrink the menu card to fit its rows instead of stretching
+        // to full screen, and center it vertically. Rows are laid out top-aligned
+        // inside the popup by Menu.onMeasure, so a content-height popup keeps the
+        // compact pitch and leaves only a small even inset around the card.
+        if(menu&&"ui6".equals(style.id)){
+            String[] cats=state.getStringArray("categories");
+            int rows=cats==null?5:cats.length;
+            // [lwwy-mod] 行距与 SharedTvUi.menuPitch 的 ui6=66 保持一致，卡片更舒展。
+            int pitch=Math.round(66*d);
+            int contentHeight=rows*pitch+Math.round(24*d);
+            height=Math.min(height,contentHeight);
+            topInset=Math.max(0,(anchor.getHeight()-height)/2);
+        }
         final int maxWidth=Math.max(1,anchor.getWidth()-2*horizontalInset);
         if(menu&&content instanceof xiao.bu.tv.skin.SharedTvUi.MenuWidth)
             width=Math.min(maxWidth,((xiao.bu.tv.skin.SharedTvUi.MenuWidth)content).preferredWidth(height));
-        if(legacy.show(anchor,content,width,height,horizontalInset,verticalInset,menu)){
+        if(legacy.show(anchor,content,width,height,horizontalInset,topInset,menu)){
             exitEvents=exit?events:null;return;
         }
         // Android's focusable PopupWindow consumes BACK itself and only dismisses.
@@ -78,7 +92,7 @@ final class TvUiMenu {
         popup.setInputMethodMode(PopupWindow.INPUT_METHOD_NOT_NEEDED);
         popup.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
         content.setSystemUiVisibility(activity.getWindow().getDecorView().getSystemUiVisibility());
-        try{popup.showAtLocation(anchor,menu?Gravity.RIGHT|Gravity.TOP:Gravity.LEFT|Gravity.TOP,horizontalInset,verticalInset);}
+        try{popup.showAtLocation(anchor,menu?Gravity.RIGHT|Gravity.TOP:Gravity.LEFT|Gravity.TOP,horizontalInset,topInset);}
         catch(WindowManager.BadTokenException unavailable){
             // The host may lose its window between the token check and addView.
             dismiss();return;

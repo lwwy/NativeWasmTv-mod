@@ -83,6 +83,11 @@ final class PlaylistManager {
         this.context = context.getApplicationContext();
         preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         catalogStore = new ChannelCatalogStore(this.context);
+        // [lwwy-mod] One-time: 我的收藏 group defaults to unselected (hidden from the
+        // channel list). Runs once so a manual toggle later is still respected.
+        if(!preferences.getBoolean("favorites_default_off_v1",false))
+            preferences.edit().putBoolean(FAVORITES_GROUP_VISIBLE,false)
+                    .putBoolean("favorites_default_off_v1",true).apply();
     }
 
     String getRecommendedUrl() {
@@ -139,7 +144,7 @@ final class PlaylistManager {
         return result;
     }
 
-    boolean isFavoritesGroupVisible() { return preferences.getBoolean(FAVORITES_GROUP_VISIBLE, true); }
+    boolean isFavoritesGroupVisible() { return preferences.getBoolean(FAVORITES_GROUP_VISIBLE, false); }
 
     synchronized ChannelCatalog.Group[] updateFavoritesGroupVisible(boolean visible) throws IOException {
         if (!preferences.edit().putBoolean(FAVORITES_GROUP_VISIBLE, visible).commit())

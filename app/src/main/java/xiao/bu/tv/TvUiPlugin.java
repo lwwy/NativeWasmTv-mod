@@ -33,8 +33,10 @@ final class TvUiPlugin {
     static void attach(Context c,Listener value){
         listener=new WeakReference<>(value);
         final Context app=c.getApplicationContext();
-        String id=app.getSharedPreferences("tv_ui",0).getString("selected","builtin");
-        if(!valid(id)){id="builtin";app.getSharedPreferences("tv_ui",0).edit().putString("selected",id).apply();}
+        // [lwwy-mod] Default theme is ui6 (银雾玻璃) for fresh installs. An existing
+        // saved choice is still honored; rejectRenderer keeps builtin as a safe fallback.
+        String id=app.getSharedPreferences("tv_ui",0).getString("selected","ui6");
+        if(!valid(id)){id="ui6";app.getSharedPreferences("tv_ui",0).edit().putString("selected",id).apply();}
         if("builtin".equals(id)&&active==null)return;
         if(active!=null&&active.id.equals(id)){notifyChanged();return;}
         selectAsync(app,id);

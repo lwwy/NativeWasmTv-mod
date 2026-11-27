@@ -157,7 +157,8 @@ public final class LegacyWebActivity extends Activity implements WebSourceView.L
             case "configuration": source.applyInteractiveBrowser(data.getBoolean("interactiveBrowser",false)); source.applyConfiguration(data.getString("viewport", "720p"), data.getBoolean("images", true),
                     data.getString("ua", "windows"), data.getString("version", "native"), data.getFloat("pageScale", 1f),
                     data.getBoolean("ads", false), data.getBoolean("rtc"), data.getBoolean("scripts"), data.getString("userScripts", "[]"));
-                source.applyBackgroundPlayback(data.getBoolean("backgroundPlayback",true));
+                // [lwwy-mod] Background playback defaults off.
+                source.applyBackgroundPlayback(data.getBoolean("backgroundPlayback",false));
                 source.applyAutoPlay(data.getBoolean("autoPlay",true));
                 source.applyMinimalMode(data.getBoolean("minimalMode", false));
                 cursor.setMovementOnly(data.getBoolean("minimalMode", false));
@@ -179,7 +180,7 @@ public final class LegacyWebActivity extends Activity implements WebSourceView.L
                 cursor.setMovementOnly(data.getBoolean("enabled", false)); break;
             case "interactiveBrowser": source.applyInteractiveBrowser(data.getBoolean("enabled",false)); break;
             case "autoPlay": source.applyAutoPlay(data.getBoolean("enabled", true)); break;
-            case "backgroundPlayback": source.applyBackgroundPlayback(data.getBoolean("enabled",true)); break;
+            case "backgroundPlayback": source.applyBackgroundPlayback(data.getBoolean("enabled",false)); break;
             case "pageCoverStyle": source.applyPageCoverStyle(data.getString("style","status")); break;
             case "pageCover": source.applyPageCover(data.getBoolean("enabled", false)); break;
             case "playbackFullscreen": source.showPlaybackFullscreen(); break;

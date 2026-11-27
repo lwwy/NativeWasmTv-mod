@@ -48,7 +48,8 @@ public abstract class SharedTvUi implements TvUi {
     }
     private float menuFontSize(){return theme()==3?22:theme()<=4?20:19;}
     private float menuTextSize(float rowHeight){return Math.min(menuFontSize(),Math.max(12,rowHeight-20));}
-    private int menuPitch(float d){return Math.round((theme()==2?58:theme()==3?65:60)*d);}
+    // [lwwy-mod] ui6 行距放大，菜单卡片更舒展，二级选项文字不再被挤压。
+    private int menuPitch(float d){return Math.round((theme()==2?58:theme()==3?65:theme()==6?66:60)*d);}
     private int menuTop(float d,int height,int count){
         int pitch=Math.min(menuPitch(d),Math.max(1,height/Math.max(1,count)));
         return Math.max(0,(height-count*pitch)/2);
@@ -549,13 +550,16 @@ public abstract class SharedTvUi implements TvUi {
                     if(title==null)continue;
                     boolean radio=all.getInt("selected",-1)>=0||title.endsWith(" ●")||title.endsWith(" ○");
                     if(title.endsWith(" ●")||title.endsWith(" ○"))title=title.substring(0,title.length()-2);
-                    left=Math.max(left,Math.min(font*6,measure.measureText(title)+(radio?20:0)));
+                    // [lwwy-mod] 去掉 font*6 硬上限，按实测文字宽度给足列宽；
+                    // 二级选项（智能硬解/显示网速等）不再被省略号截断。
+                    left=Math.max(left,measure.measureText(title)+(radio?20:0)+4);
                 }
             }
             // Restore any host-side option snapshot for the active category.
             if(category>=0)events.options(category);
             // Both columns use the same outer inset; reserve radio space only
             // for rows that actually draw a mark.
+            // [lwwy-mod] ui6 内边距 16→24，卡片整体更舒展。
             float padding=theme()==2?28:24;
             left+=padding;right+=padding+8;
             // Size each column independently: a long option must not inflate the

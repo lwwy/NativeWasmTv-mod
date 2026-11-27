@@ -729,7 +729,8 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
     private volatile HlsProxyServer proxy;
     private boolean proxyStatefulCmgSource;
     private boolean lowResourceDevice;
-    private volatile boolean backgroundPlaybackEnabled=true;
+    // [lwwy-mod] Background playback defaults off.
+    private volatile boolean backgroundPlaybackEnabled=false;
     private boolean windowContentActive=true;
     private boolean backgroundPlaybackSuspended;
     private Channel backgroundChannel;
@@ -761,10 +762,17 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
                 backgroundNeedsResolve=false;
                 backgroundSystem=player instanceof AndroidMediaPlayer; backgroundSystemVideo=!audioOnlyPlayback;
                 try {
-                    backgroundPosition=prepared && seekableDuration() > 0L ? player.getCurrentPosition() : 0L;
-                    // Reopen within the last frame interval, rather than past EOF.
-                    // Completion itself is restored separately after preparation.
-                    if(backgroundCompleted&&prepared)backgroundPosition=Math.max(0L,seekableDuration()-250L);
+                    // [lwwy-mod] 直播切后台后不记录播放位置：回来时从直播边缘起播，避免 seek 回离开那一刻的旧画面
+                    // 造成"直播慢一段"。判断条件与 catalogueLive 一致——仅普通直播频道跳过；回看/快速频道/投屏仍保留断点续播。
+                    boolean liveForResume=catchupProgram==null&&quickChannel==null&&multimediaReceiverChannel==null;
+                    if(liveForResume){
+                        backgroundPosition=0L;
+                    }else{
+                        backgroundPosition=prepared && seekableDuration() > 0L ? player.getCurrentPosition() : 0L;
+                        // Reopen within the last frame interval, rather than past EOF.
+                        // Completion itself is restored separately after preparation.
+                        if(backgroundCompleted&&prepared)backgroundPosition=Math.max(0L,seekableDuration()-250L);
+                    }
                     backgroundWasPaused=prepared && !player.isPlaying();
                 } catch (RuntimeException ignored) { backgroundPosition=0L; }
             } else if (pendingPlayerChannel != null) {
@@ -1650,7 +1658,12 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
         rightVerticalGesture = PlaybackGesturePolicy.right(preferences.getString(PlaybackGesturePolicy.RIGHT_KEY, PlaybackGesturePolicy.RIGHT_DEFAULT));
         reverseUpDown = preferences.getBoolean(REVERSE_UP_DOWN, false);
         autoStart = preferences.getBoolean(AUTO_START, false);
-        backgroundPlaybackEnabled=preferences.getBoolean("background_playback",true);
+        // [lwwy-mod] One-time: background playback defaults off. Runs once so a later
+        // manual enable in settings (if ever exposed) is still respected.
+        if(!preferences.getBoolean("background_playback_default_off_v1",false))
+            preferences.edit().putBoolean("background_playback",false)
+                    .putBoolean("background_playback_default_off_v1",true).apply();
+        backgroundPlaybackEnabled=preferences.getBoolean("background_playback",false);
         defaultDecodeMode = decodeMode = sanitizeDecodeMode(preferences.getString(DECODE_MODE, DECODE_MODE_AUTO));
         playerEngine = PLAYER_ENGINE_SYSTEM.equals(preferences.getString(PLAYER_ENGINE, PLAYER_ENGINE_IJK))
                 ? PLAYER_ENGINE_SYSTEM : PLAYER_ENGINE_IJK;
@@ -2178,6 +2191,8 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
             }
         });
         channelList.setOnItemLongClickListener((parent,view,position,id)->{
+            // [lwwy-mod] ui6 银雾玻璃下禁用长按收藏（ListView 自带长按计时器独立于我们自己的 Runnable）。
+            if(favoriteDisabled())return true;
             if(!channelTouchFavoriteConsumed){channelTouchFavoriteConsumed=true;root.removeCallbacks(channelTouchFavoriteLongPress);toggleChannelFavoriteFromLongPress(position);}return true;
         });
         channelList.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -2873,10 +2888,10 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
         closeChannelList();backPrompt.setVisibility(View.GONE);channelBar.removeCallbacks(hideChannelBar);channelBar.setVisibility(View.GONE);
         TvUiSettingsMenu model=new TvUiSettingsMenu(new TvUiSettingsMenu.Host(){
             public Bundle groups(){
-                JSONArray groups=playlistManager.getGroupSettingsJson();int count=groups.length()+1;
+                // [lwwy-mod] 频道管理里隐藏"我的收藏"入口；收藏功能本身保留（长按收藏、频道列表仍可用）。
+                JSONArray groups=playlistManager.getGroupSettingsJson();int count=groups.length();
                 String[] ids=new String[count],names=new String[count];boolean[] visible=new boolean[count];
-                ids[0]="favorites";names[0]="我的收藏";visible[0]=playlistManager.isFavoritesGroupVisible();
-                for(int i=1;i<count;i++){JSONObject group=groups.optJSONObject(i-1);ids[i]=group.optString("id");names[i]=group.optString("name");visible[i]=group.optBoolean("enabled",true);}
+                for(int i=0;i<count;i++){JSONObject group=groups.optJSONObject(i);ids[i]=group.optString("id");names[i]=group.optString("name");visible[i]=group.optBoolean("enabled",true);}
                 Bundle b=new Bundle();b.putStringArray("ids",ids);b.putStringArray("names",names);b.putBooleanArray("visible",visible);return b;
             }
             public void group(String id,boolean visible){
@@ -2908,12 +2923,12 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
                     case "favorite":showChannelMenu(currentGroupIndex);toggleBrowsingChannelFavorite(currentChannelIndex);break;
                     case "cache":if(!cacheClearRequested){cacheClearRequested=true;showCacheClearToast("正在清理缓存…");applyTvUiSetting("clearWebCache",true);}else showCacheClearToast("正在清理缓存，请稍候…");break;
                     case "exit":showTvUiExit();break;
-                    case "guide":tvUiMenu.show(root,"guide",new Bundle(),new xiao.bu.tv.skin.TvUi.Events(){public Bundle options(int category){return new Bundle();}public void action(int category,int item){}public void dismiss(){tvUiMenu.dismiss();openTvUiMenu(5);}});break;
+                    case "guide":tvUiMenu.show(root,"guide",new Bundle(),new xiao.bu.tv.skin.TvUi.Events(){public Bundle options(int category){return new Bundle();}public void action(int category,int item){}public void dismiss(){tvUiMenu.dismiss();openTvUiMenu(3);}});break;
                     case "styles":showTvUiStyles();break;
                     case "render":showTvUiRenderModes();break;
                     case "hdr":showTvUiHdrModes();break;
                     case "ui-size":showTvUiSizes();break;
-                    case "radio-styles":RadioUiMenu.show(MainActivity.this,root,tvUiMenu,()->openTvUiMenu(6));break;
+                    case "radio-styles":RadioUiMenu.show(MainActivity.this,root,tvUiMenu,()->openTvUiMenu(3));break;
                     case "install-update":if(autoUpdater!=null)autoUpdater.installLiteUpdate();break;
                     case "update":if(autoUpdater==null)Toast.makeText(MainActivity.this,"更新服务尚未就绪",Toast.LENGTH_LONG).show();else autoUpdater.checkLiteForUpdates(true);break;
                     default:openWebManagement();break;
@@ -3021,7 +3036,7 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
         tvUiMenu.showSubmenu(root,b,new xiao.bu.tv.skin.TvUi.Events(){
             public Bundle options(int category){Bundle choices=new Bundle();choices.putStringArray("items",TvUiPlugin.NAMES);int index=0;for(int i=0;i<TvUiPlugin.IDS.length;i++)if(TvUiPlugin.current()!=null&&TvUiPlugin.IDS[i].equals(TvUiPlugin.current().id))index=i;choices.putInt("selected",index);return choices;}
             public void action(int category,int option){tvUiMenu.dismiss();TvUiPlugin.selectAsync(MainActivity.this,TvUiPlugin.IDS[option]);}
-            public void dismiss(){tvUiMenu.dismiss();openTvUiMenu(6);}
+            public void dismiss(){tvUiMenu.dismiss();openTvUiMenu(3);}
         });
     }
     private void showTvUiSizes(){
@@ -3034,7 +3049,7 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
                 choices.putInt("selected",index);return choices;
             }
             public void action(int category,int option){if(option>=0&&option<modes.length&&!modes[option].equals(uiScaleMode))applyTvUiSetting("uiScaleMode",modes[option]);}
-            public void dismiss(){tvUiMenu.dismiss();openTvUiMenu(5);}
+            public void dismiss(){tvUiMenu.dismiss();openTvUiMenu(3);}
         });
     }
     private void showTvUiRenderModes(){
@@ -3046,7 +3061,7 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
                 choices.putInt("selected","texture".equals(getSharedPreferences(PREFERENCES,MODE_PRIVATE).getString(DirectVideoView.RENDER_KEY,"surface"))?1:0);return choices;
             }
             public void action(int category,int option){if(option>=0&&option<modes.length)applyTvUiSetting("videoRenderMode",modes[option]);}
-            public void dismiss(){tvUiMenu.dismiss();openTvUiMenu(5);}
+            public void dismiss(){tvUiMenu.dismiss();openTvUiMenu(3);}
         });
     }
     private void showTvUiHdrModes(){
@@ -3071,7 +3086,7 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
                 }
                 if(option>=0&&option<modes.length&&!modes[option].equals(hdrMode))applyTvUiSetting("hdrMode",modes[option]);
             }
-            public void dismiss(){tvUiMenu.dismiss();openTvUiMenu(5);}
+            public void dismiss(){tvUiMenu.dismiss();openTvUiMenu(3);}
         });
     }
     private void showTvUiExit(){
@@ -7750,7 +7765,8 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
     private void installCjsPluginAndStart(int channelIndex, String channelName, final String siteId) {
         pendingCjsChannelIndex = channelIndex;
         showLoading(channelName, "正在下载播放兼容插件");
-        showChannelBar(channelName, "首次使用正在安装兼容插件");
+        // [lwwy-mod] Removed the redundant "首次使用正在安装兼容插件" channel-bar prompt.
+        // The loading progress above already covers this state.
         if (cjsPluginInstallInProgress) {
             return;
         }
@@ -12146,8 +12162,12 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
         videoClock.setMaxWidth(Integer.MAX_VALUE);
         videoClock.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx);
         if (networkSpeedOverlay != null) {
-            // Match the classic HUD in every theme; background styling stays themed.
-            networkSpeedOverlay.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx);
+            // [lwwy-mod] UI6: slightly larger speed text; the clock keeps its own size.
+            float trafficSizePx = isFrostedUi()
+                    ? TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP,
+                            14f * effectiveUiScale, getResources().getDisplayMetrics())
+                    : textSizePx;
+            networkSpeedOverlay.setTextSize(TypedValue.COMPLEX_UNIT_PX, trafficSizePx);
             networkSpeedOverlay.setTypeface(videoClock.getTypeface());
             networkSpeedOverlay.setTextScaleX(1f);
         }
@@ -12224,8 +12244,11 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
     private void configureTvUiTraffic(int width,int height){
         if(networkSpeedOverlay==null||TvUiPlugin.current()==null)return;
         float d=themeScale();
-        FrameLayout.LayoutParams p=(FrameLayout.LayoutParams)networkSpeedOverlay.getLayoutParams();p.width=-2;p.height=-2;p.gravity=Gravity.BOTTOM|Gravity.RIGHT;p.rightMargin=Math.round(12*d);p.leftMargin=0;
-        p.bottomMargin=Math.round(12*d);networkSpeedOverlay.setLayoutParams(p);
+        // [lwwy-mod] UI6: larger safe-area inset so the speed chip is not clipped
+        // by the rounded bottom-right corner.
+        int trafficInset=isFrostedUi()?Math.round(24*d):Math.round(12*d);
+        FrameLayout.LayoutParams p=(FrameLayout.LayoutParams)networkSpeedOverlay.getLayoutParams();p.width=-2;p.height=-2;p.gravity=Gravity.BOTTOM|Gravity.RIGHT;p.rightMargin=trafficInset;p.leftMargin=0;
+        p.bottomMargin=trafficInset;networkSpeedOverlay.setLayoutParams(p);
     }
 
     private void configureVideoDateForViewport(int viewportWidth, int viewportHeight) {
@@ -12257,6 +12280,8 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
         int shortSide = Math.min(viewportWidth, viewportHeight);
         float textSizePx = Math.max(10f, Math.min(48f, shortSide * 0.022f)
                 - 4f * shortSide / 540f) * effectiveUiScale;
+        // [lwwy-mod] UI6: enlarge debug text ~25% so it is easy to read on phones.
+        if (isFrostedUi()) textSizePx *= 1.25f;
         debugInfoTextSizePx = textSizePx;
         float shadowRadiusPx = Math.max(1.5f, textSizePx * 0.09f);
         float shadowOffsetPx = Math.max(1f, textSizePx * 0.045f);
@@ -12271,8 +12296,12 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
         params.width = FrameLayout.LayoutParams.MATCH_PARENT;
         params.height = FrameLayout.LayoutParams.WRAP_CONTENT;
         params.gravity = Gravity.BOTTOM | Gravity.LEFT;
-        params.leftMargin = Math.max(8, Math.round(viewportWidth * 0.01f));
-        params.rightMargin = params.leftMargin;
+        // [lwwy-mod] UI6: push the debug overlay (~24*scale) in from the rounded
+        // screen corner so the bottom-left rows are not clipped.
+        int debugInset = isFrostedUi() ? Math.round(24f * themeScale())
+                : Math.max(8, Math.round(viewportWidth * 0.01f));
+        params.leftMargin = debugInset;
+        params.rightMargin = debugInset;
         if (showNetworkSpeed && networkSpeedOverlay != null) {
             FrameLayout.LayoutParams traffic = (FrameLayout.LayoutParams)networkSpeedOverlay.getLayoutParams();
             int trafficWidth = (int)Math.ceil(networkSpeedOverlay.getPaint().measureText("999.9 MB/s"))
@@ -12281,7 +12310,8 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
                     + Math.max(8, Math.round(textSizePx)));
         }
         params.topMargin = 0;
-        params.bottomMargin = Math.max(6, Math.round(viewportHeight * 0.01f));
+        params.bottomMargin = isFrostedUi() ? debugInset
+                : Math.max(6, Math.round(viewportHeight * 0.01f));
         debugInfoOverlay.setGravity(Gravity.LEFT);
         debugInfoOverlay.setMaxLines(8);
         debugInfoOverlay.setEllipsize(TextUtils.TruncateAt.END);
@@ -13316,6 +13346,8 @@ public final class MainActivity extends Activity implements TvUiPlugin.Listener,
     }
 
     private void toggleChannelFavoriteFromLongPress(int position){
+        // [lwwy-mod] 兜底：ui6 银雾玻璃下任何路径都不得触发长按收藏。
+        if(favoriteDisabled())return;
         if(!canBrowseGroupChannels(browsingGroupIndex))return;
         ChannelCatalog.Group group=ChannelCatalog.GROUPS[browsingGroupIndex];
         if(position<0||position>=group.channels.length)return;

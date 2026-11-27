@@ -6,10 +6,14 @@ import xiao.bu.tv.skin.TvUi;
 final class TvUiSettingsMenu implements TvUi.Events {
     interface Host {Bundle state();Bundle groups();void group(String id,boolean visible);void setting(String key,Object value);void source(int index);void navigate(String destination);}
     private final Host host;private final TvUiMenu menu;
-    static final int BROWSER_CATEGORY=7;
+    static final int BROWSER_CATEGORY=3;
     private Bundle groupChoices;
-    private static final String[] keys={"source","ratio","decode","timeout","channels","display","preferences","browser","version"};
-    private static final String[] titles={"线路选择","画面比例","解码方式","超时换源","频道管理","显示设置","偏好设置","网页配置","版本信息"};
+    // [lwwy-mod] Hidden settings entries. The menu is built from these arrays, so a
+    // hidden category is removed from both keys[] and titles[] and all downstream
+    // option indices are remapped in options()/action() below. Functionality is
+    // only hidden from the UI, not disabled in the app.
+    private static final String[] keys={"source","decode","channels","display"};
+    private static final String[] titles={"线路选择","解码方式","频道管理","显示设置"};
     TvUiSettingsMenu(Host host,TvUiMenu menu){this.host=host;this.menu=menu;}
     Bundle initial(){Bundle b=new Bundle();b.putStringArray("categories",titles);return b;}
     private static Bundle choices(String[] items,int selected){Bundle b=new Bundle();b.putStringArray("items",items);b.putInt("selected",selected);return b;}
@@ -24,14 +28,12 @@ final class TvUiSettingsMenu implements TvUi.Events {
             String[] rows=new String[names.length];for(int i=0;i<names.length;i++)rows[i]=check(names[i],shown[i]);
             return choices(rows,-1);
         }
-        if("display".equals(key))return choices(new String[]{check("屏显时间",s.getBoolean("clock")),check("显示网速",s.getBoolean("speed")),check("调试信息",s.getBoolean("debug")),check("播放进度",s.getBoolean("position")),"界面大小","HDR 模式","遥控器说明","渲染方式"},-1);
-        if("preferences".equals(key)){
-            String[] rows={check("开机自启",s.getBoolean("boot")),check("换台反转",s.getBoolean("reverse")),"界面主题","唱片界面","网页管理","清空缓存",check("线路记忆",s.getBoolean("rememberChannelSource")),check("解码记忆",s.getBoolean("rememberChannelDecode")),check("更新弹窗",s.getBoolean("updatePopupEnabled"))};
-            return choices(rows,-1);
-        }
-        if("browser".equals(key))return choices(TvUiBrowserMenu.titles(s.getBoolean("liteBrowserSupported")),-1);
-        String state=s.getString("updateState"),button="checking".equals(state)?"正在检查…":"available".equals(state)||"ready".equals(state)?"更新至 "+s.getString("updateVersion"):"检查更新";
-        Bundle versionChoices=choices(new String[]{s.getString("version"),button},-1);
+        // [lwwy-mod] display: keep only 显示网速/调试信息.
+        if("display".equals(key))return choices(new String[]{check("显示网速",s.getBoolean("speed")),check("调试信息",s.getBoolean("debug"))},-1);
+        // [lwwy-mod] preferences: keep only 界面主题.
+        if("preferences".equals(key))return choices(new String[]{"界面主题"},-1);
+        // [lwwy-mod] version: show build number only; 检查更新 hidden.
+        Bundle versionChoices=choices(new String[]{s.getString("version")},-1);
         versionChoices.putInt("firstEnabled",1);
         return versionChoices;
     }
@@ -45,10 +47,12 @@ final class TvUiSettingsMenu implements TvUi.Events {
         else if("ratio".equals(key))host.setting("videoScaleMode",new String[]{"fit","stretch","18:9","16:9","4:3","fill","blur"}[option]);
         else if("decode".equals(key))host.setting("decodeMode",new String[]{"auto","hardware","software"}[option]);
         else if("timeout".equals(key))host.setting("autoSwitchSourceSeconds",option*5);
-        else if("display".equals(key)){if(option==0)host.setting("showDateTime",!s.getBoolean("clock"));else if(option==1)host.setting("showNetworkSpeed",!s.getBoolean("speed"));else if(option==2)host.setting("showDebugInfo",!s.getBoolean("debug"));else if(option==3)host.setting("showPlaybackPosition",!s.getBoolean("position"));else go(option==4?"ui-size":option==5?"hdr":option==7?"render":"guide");}
-        else if("preferences".equals(key)){if(option==0)host.setting("autoStart",!s.getBoolean("boot"));else if(option==1)host.setting("reverseKeys",!s.getBoolean("reverse"));else if(option==6)host.setting("rememberChannelSource",!s.getBoolean("rememberChannelSource"));else if(option==7)host.setting("rememberChannelDecode",!s.getBoolean("rememberChannelDecode"));else if(option==8)host.setting("updatePopupEnabled",!s.getBoolean("updatePopupEnabled"));else go(option==2?"styles":option==3?"radio-styles":option==4?"manage":"cache");}
+        // [lwwy-mod] remapped: display keeps only 0=网速,1=调试.
+        else if("display".equals(key)){if(option==0)host.setting("showNetworkSpeed",!s.getBoolean("speed"));else if(option==1)host.setting("showDebugInfo",!s.getBoolean("debug"));}
+        // [lwwy-mod] remapped: only 界面主题 survives.
+        else if("preferences".equals(key)){if(option==0)go("styles");}
+        // [lwwy-mod] version: 检查更新 hidden, no clickable action remains.
         else if("browser".equals(key))go("browser:"+option);
-        else{if(option==1){String state=s.getString("updateState");if(!"checking".equals(state)&&!"downloading".equals(state))host.navigate("available".equals(state)||"ready".equals(state)?"install-update":"update");}}
     }
     private void go(String where){menu.dismiss();host.navigate(where);}
     public void dismiss(){menu.dismiss();}
