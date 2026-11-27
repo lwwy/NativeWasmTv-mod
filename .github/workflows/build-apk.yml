@@ -30,13 +30,12 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Install SDK platform & build-tools
+        # ubuntu-latest 已预装 Android SDK 与 cmdline-tools，无需 setup-android
+        # （该 action 会执行已下线的 `sdkmanager tools`，在 2026 年的仓库中会失败）。
         run: |
-          sdkmanager "platforms;android-34" "build-tools;35.0.0"
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "platforms;android-34" "build-tools;35.0.0"
 
       - name: Generate local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > local.properties
