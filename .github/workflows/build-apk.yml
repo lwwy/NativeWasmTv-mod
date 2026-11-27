@@ -31,16 +31,19 @@ jobs:
           java-version: '17'
 
       - name: Install SDK platform & build-tools
-        # ubuntu-latest 预装了 Android SDK/cmdline-tools，但 sdkmanager 不在 PATH。
-        # 不用 setup-android@v3：它会执行已下线的 `sdkmanager tools`，2026 年会失败。
+        # ubuntu-latest 预装 Android SDK 于 /usr/local/lib/android/sdk，但 setup-android@v3
+        # 会执行已下线的 `sdkmanager tools` 而失败，且不用它时 ANDROID_HOME 往往未设置。
+        # 这里显式定位 SDK 与 sdkmanager，不依赖 action 注入的环境变量。
         run: |
-          SDKM=$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 2 -name sdkmanager -type f | head -1)
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          SDKM=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -1)
           echo "sdkmanager=$SDKM"
           yes | "$SDKM" --licenses > /dev/null 2>&1 || true
           "$SDKM" "platforms;android-34" "build-tools;35.0.0"
 
       - name: Generate local.properties
-        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+        run: echo "sdk.dir=${ANDROID_HOME:-/usr/local/lib/android/sdk}" > local.properties
 
       - name: Make gradlew executable
         run: chmod +x gradlew
