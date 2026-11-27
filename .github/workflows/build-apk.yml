@@ -31,11 +31,13 @@ jobs:
           java-version: '17'
 
       - name: Install SDK platform & build-tools
-        # ubuntu-latest 已预装 Android SDK 与 cmdline-tools，无需 setup-android
-        # （该 action 会执行已下线的 `sdkmanager tools`，在 2026 年的仓库中会失败）。
+        # ubuntu-latest 预装了 Android SDK/cmdline-tools，但 sdkmanager 不在 PATH。
+        # 不用 setup-android@v3：它会执行已下线的 `sdkmanager tools`，2026 年会失败。
         run: |
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager "platforms;android-34" "build-tools;35.0.0"
+          SDKM=$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 2 -name sdkmanager -type f | head -1)
+          echo "sdkmanager=$SDKM"
+          yes | "$SDKM" --licenses > /dev/null 2>&1 || true
+          "$SDKM" "platforms;android-34" "build-tools;35.0.0"
 
       - name: Generate local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > local.properties
